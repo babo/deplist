@@ -5,6 +5,8 @@ import (
 	"go/build"
 	"log"
 	"os"
+	"sort"
+	"strings"
 )
 
 func usage(status int) {
@@ -16,22 +18,36 @@ package name is given, the current directory is used.
 	os.Exit(status)
 }
 
+func three(name string) string {
+	parts := strings.Split(name, "/")
+	if len(parts) > 3 {
+        return strings.Join(parts[:3], "/")
+	} else {
+        return name
+    }
+}
+
 func findDeps(soFar map[string]bool, name string) error {
 	cwd, err := os.Getwd()
 	if err != nil {
 		return err
 	}
 
-	pkg, err := build.Import(name, cwd, 0)
+    pkg, err := build.Import(name, cwd, 0)
 	if err != nil {
-		return err
+        if build.IsLocalImport(name) {
+            return err
+        } else {
+            soFar[three(name)] = true
+            return nil
+        }
 	}
 
 	if pkg.Goroot {
 		return nil
 	}
 
-	soFar[pkg.ImportPath] = true
+	soFar[three(name)] = true //pkg.ImportPath)] = true
 	for _, imp := range pkg.Imports {
 		if !soFar[imp] {
 			if err := findDeps(soFar, imp); err != nil {
@@ -64,7 +80,14 @@ func main() {
 		log.Fatalln(err)
 	}
 	delete(deps, pkg)
-	for dep := range deps {
-		fmt.Println(dep)
+	keys := make([]string, 0, len(deps))
+	for key, _ := range deps {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, dep := range keys {
+        if !build.IsLocalImport(dep) {
+			fmt.Println(dep)
+        }
 	}
 }
